@@ -8,7 +8,7 @@ from dipy.reconst.multi_voxel import multi_voxel_fit
 from dipy.reconst.shm import (sph_harm_ind_list, real_sph_harm, order_from_ncoef,
                               sph_harm_lookup, lazy_index, SphHarmFit,
                               real_sym_sh_basis, sh_to_rh, gen_dirac,
-                              forward_sdeconv_mat, real_sph_harm2, sph_harm2)
+                              forward_sdeconv_mat, real_sph_harm2)
 from dipy.data import get_sphere
 from dipy.core.geometry import cart2sphere
 from dipy.core.ndindex import ndindex
@@ -223,7 +223,21 @@ class ConstrainedSDTModel(OdfModel, Cache):
         r, theta, phi = cart2sphere(self.sphere.x, self.sphere.y, self.sphere.z)
         self.B_reg = real_sph_harm(m, n, theta[:, None], phi[:, None])
 
-        self.R, self.P = forward_sdt_deconv_mat(ratio, n)
+        if isinstance(ratio, float):
+            self.R, self.P = forward_sdt_deconv_mat(ratio, n)
+        else:
+            self.ratio = ratio
+            r_rh = sh_to_rh(self.ratio, m, n)
+            self.R = forward_sdeconv_mat(r_rh, n)
+
+            n_degrees = n.max() // 2 + 1
+            frt = np.zeros(n_degrees) # FRT (Funk-Radon transform) q-ball matrix
+            for l in np.arange(0, n_degrees*2, 2):
+                frt[l / 2] = 2 * np.pi * lpn(l, 0)[0][-1]
+
+            idx = n // 2
+            bb = frt[idx]
+            self.P = np.diag(bb)
 
         # scale lambda_ to account for differences in the number of
         # SH coefficients and number of mapped directions
@@ -708,6 +722,7 @@ def recursive_response(gtab, data, mask=None, sh_order=8, peak_thr=0.01,
 
     m, n = sph_harm_ind_list(sh_order)
     where_dwi = lazy_index(~gtab.b0s_mask)
+    mask_m = m != 0
 
     for num_it in range(1, iter):
         r_sh_all = np.zeros(no_params)
@@ -735,7 +750,7 @@ def recursive_response(gtab, data, mask=None, sh_order=8, peak_thr=0.01,
             x, y, z = rot_gradients[where_dwi].T
             r, theta, phi = cart2sphere(x, y, z)
             # for the gradient sphere
-            B_dwi = real_sph_harm(m, n, theta[:, None], phi[:, None])
+            B_dwi = real_sph_harm2(m, n, theta[:, None], phi[:, None])
             r_sh_all = r_sh_all + np.linalg.lstsq(B_dwi,
                                                   data[num_vox, where_dwi])[0]
 
@@ -747,6 +762,113 @@ def recursive_response(gtab, data, mask=None, sh_order=8, peak_thr=0.01,
 
         response_p = response
 
+    response[mask_m] = 0
+    return response
+
+
+def recursive_response_sdt(gtab, data, mask=None, sh_order=8, peak_thr=0.01,
+                       init_fa=0.08, init_trace=0.0021, iter=8,
+                       convergence=0.001, parallel=True):
+    """ Recursive calibration of response function for SDT using peak threshold
+
+    Parameters
+    ----------
+    gtab : GradientTable
+    data : ndarray
+        diffusion data
+    mask : ndarray
+        mask for recursive calibration, for example a white matter mask. It has
+        shape `data.shape[0:3]` and dtype=bool.
+    sh_order : int
+        maximal spherical harmonics order
+    peak_thr : float
+        peak threshold, how large the second peak can be relative to the first
+        peak in order to call it a single fiber population [1]
+    init_fa : float
+        FA of the initial 'fat' response function (tensor)
+    init_trace : float
+        trace of the initial 'fat' response function (tensor)
+    iter : int
+        maximum number of iterations for calibration
+    convergence : float
+        convergence criterion, maximum relative change of SH coefficients
+
+    Returns
+    -------
+    response : ndarray
+        response function in SH coefficients
+
+    Notes
+    -----
+    In SDT there is an important pre-processing step: the estimation of the
+    fiber response function. Using an FA threshold is not a very robust method.
+    It is dependent on the dataset (non-informed used subjectivity), and still
+    depends on the diffusion tensor (FA and first eigenvector),
+    which has low accuracy at high b-value. This function recursively
+    calibrates the response function, for more information see [1].
+
+    References
+    ----------
+    .. [1] Tax, C.M.W., et al. NeuroImage 2014. Recursive calibration of
+           the fiber response function for spherical deconvolution of
+           diffusion MRI data.
+    """
+    S0 = 1
+    evals = fa_trace_to_lambdas(init_fa, init_trace)
+    response = (evals, S0)
+    sphere = get_sphere('symmetric724')
+
+    no_params = ((sh_order + 1) * (sh_order + 2)) / 2
+    response_p = np.ones(no_params)
+    if mask is None:
+        data = data.reshape(-1, data.shape[-1])
+#        data = data[np.ones(data.shape[0:(data.ndim-1)], dtype=bool)]
+    else:
+        data = data[mask]
+
+    m, n = sph_harm_ind_list(sh_order)
+    where_dwi = lazy_index(~gtab.b0s_mask)
+    mask_m = m != 0
+
+    for num_it in range(1, iter):
+        r_sh_all = np.zeros(no_params)
+        csd_model = ConstrainedSphericalDeconvModel(gtab, response,
+                                                    None, sh_order)
+
+        csd_peaks = peaks_from_model(model=csd_model,
+                                     data=data,
+                                     sphere=sphere,
+                                     relative_peak_threshold=peak_thr,
+                                     min_separation_angle=25,
+                                     parallel=parallel)
+
+        dirs = csd_peaks.peak_dirs
+        vals = csd_peaks.peak_values
+        single_peak_mask = (vals[:, 1] / vals[:, 0]) < peak_thr
+        data = data[single_peak_mask]
+        dirs = dirs[single_peak_mask]
+
+        for num_vox in range(0, data.shape[0]):
+            rotmat = vec2vec_rotmat(dirs[num_vox, 0], np.array([0, 0, 1]))
+
+            rot_gradients = np.dot(rotmat, gtab.gradients.T).T
+
+            x, y, z = rot_gradients[where_dwi].T
+            r, theta, phi = cart2sphere(x, y, z)
+            # for the gradient sphere
+            B_dwi = real_sph_harm2(m, n, theta[:, None], phi[:, None])
+            r_sh_all = r_sh_all + np.linalg.lstsq(B_dwi,
+                                                  data[num_vox, where_dwi])[0]
+
+        response = r_sh_all/data.shape[0]
+
+        change = abs((response_p - response)/response_p)
+        if change.all() < convergence:
+            break
+
+        response_p = response
+
+    response[mask_m] = 0
     return response
 
 
