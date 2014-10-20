@@ -8,7 +8,7 @@ from dipy.reconst.multi_voxel import multi_voxel_fit
 from dipy.reconst.shm import (sph_harm_ind_list, real_sph_harm, order_from_ncoef,
                               sph_harm_lookup, lazy_index, SphHarmFit,
                               real_sym_sh_basis, sh_to_rh, gen_dirac,
-                              forward_sdeconv_mat, real_sph_harm2)
+                              forward_sdeconv_mat)
 from dipy.data import get_sphere
 from dipy.core.geometry import cart2sphere
 from dipy.core.ndindex import ndindex
@@ -255,9 +255,19 @@ class ConstrainedSDTModel(OdfModel, Cache):
         Z = np.linalg.norm(qball_odf)
         # normalize ODF
         odf_sh /= Z
+
+        from dipy.viz import fvtk
+        sphere = get_sphere('symmetric724')
+        ren = fvtk.ren()
+        test = sh_to_sf(odf_sh, sphere, 8)
+        response_actor = fvtk.sphere_funcs(test, sphere)
+        fvtk.add(ren, response_actor)
+        fvtk.show(ren)
+
         shm_coeff, num_it = odf_deconv(odf_sh, self.R, self.B_reg,
                                        self.lambda_, self.tau)
         # print 'SDT CSD converged after %d iterations' % num_it
+
         return SphHarmFit(self, shm_coeff, None)
 
 
@@ -481,6 +491,14 @@ def odf_deconv(odf_sh, R, B_reg, lambda_=1., tau=0.1, r2_term=False):
     fodf_sh[15:] = 0
 
     fodf = np.dot(B_reg, fodf_sh)
+
+    from dipy.viz import fvtk
+    sphere = get_sphere('symmetric724')
+    ren = fvtk.ren()
+    test = sh_to_sf(fodf_sh, sphere, 8)
+    response_actor = fvtk.sphere_funcs(test, sphere)
+    fvtk.add(ren, response_actor)
+    fvtk.show(ren)
 
     # if sharpening a q-ball odf (it is NOT properly normalized), we need to
     # force normalization otherwise, for DSI, CSA, SHORE, Tensor odfs, they are
