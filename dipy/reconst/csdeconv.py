@@ -256,13 +256,13 @@ class ConstrainedSDTModel(OdfModel, Cache):
         # normalize ODF
         odf_sh /= Z
 
-        from dipy.viz import fvtk
-        sphere = get_sphere('symmetric724')
-        ren = fvtk.ren()
-        test = sh_to_sf(odf_sh, sphere, 8)
-        response_actor = fvtk.sphere_funcs(test, sphere)
-        fvtk.add(ren, response_actor)
-        fvtk.show(ren)
+#        from dipy.viz import fvtk
+#        sphere = get_sphere('symmetric724')
+#        ren = fvtk.ren()
+#        test = sh_to_sf(odf_sh, sphere, 8)
+#        response_actor = fvtk.sphere_funcs(test, sphere)
+#        fvtk.add(ren, response_actor)
+#        fvtk.show(ren)
 
         shm_coeff, num_it = odf_deconv(odf_sh, self.R, self.B_reg,
                                        self.lambda_, self.tau)
@@ -492,13 +492,13 @@ def odf_deconv(odf_sh, R, B_reg, lambda_=1., tau=0.1, r2_term=False):
 
     fodf = np.dot(B_reg, fodf_sh)
 
-    from dipy.viz import fvtk
-    sphere = get_sphere('symmetric724')
-    ren = fvtk.ren()
-    test = sh_to_sf(fodf_sh, sphere, 8)
-    response_actor = fvtk.sphere_funcs(test, sphere)
-    fvtk.add(ren, response_actor)
-    fvtk.show(ren)
+#    from dipy.viz import fvtk
+#    sphere = get_sphere('symmetric724')
+#    ren = fvtk.ren()
+#    test = sh_to_sf(fodf_sh, sphere, 8)
+#    response_actor = fvtk.sphere_funcs(test, sphere)
+#    fvtk.add(ren, response_actor)
+#    fvtk.show(ren)
 
     # if sharpening a q-ball odf (it is NOT properly normalized), we need to
     # force normalization otherwise, for DSI, CSA, SHORE, Tensor odfs, they are

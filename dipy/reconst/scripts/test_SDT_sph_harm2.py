@@ -66,57 +66,21 @@ if __name__=='__main__':
     S, sticks = multi_tensor(gtab, mevals, S0, angles=angles,
                              fractions=[50, 50], snr=SNR)
 
-#    qb = QballModel(gtab, sh_order=8, assume_normed=True)
-#
-#    qbfit = qb.fit(S)
-#    odf_gt = qbfit.odf(sphere)
-#
-#    Z = np.linalg.norm(odf_gt)
-#
-#    odfs_gt = np.zeros((3, 1, 1, odf_gt.shape[0]))
-#    odfs_gt[:,:,:] = odf_gt[:]
-#
-#    odfs_sh = sf_to_sh(odfs_gt, sphere, sh_order=8, basis_type=None)
-#
-#    odfs_sh /= Z
-#
-#    fodf_sh = odf_sh_to_sharp(odfs_sh, sphere, basis=None, ratio=3 / 15.,
-#                              sh_order=8, lambda_=1., tau=0.1)
-#
-#    fodf = sh_to_sf(fodf_sh, sphere, sh_order=8, basis_type=None)
-
-
     qb_odf_gt_single = single_tensor_qb_odf(sphere.vertices, evals, evecs)
-    qb_odf_gt_single = qb_odf_gt_single / np.sum(qb_odf_gt_single * (4 * np.pi / sphere.vertices.shape[0]))
-
-#    odf_gt_single = single_tensor_odf(sphere.vertices, evals, evecs)
-#    odf_gt_single = odf_gt_single / np.sum(odf_gt_single * (4 * np.pi / sphere.vertices.shape[0]))
-#    odf_gt_single = single_tensor_odf(gtab.gradients[where_dwi], evals, evecs)
 
     ren = fvtk.ren()
 
     response_actor = fvtk.sphere_funcs(qb_odf_gt_single, sphere)
-#    response_actor = fvtk.sphere_funcs(odf_gt_single, Sphere(xyz=gtab.gradients[where_dwi]))
 
     fvtk.add(ren, response_actor)
 
     fvtk.show(ren)
 
-#    ratio = sf_to_sh(odf_gt_single, Sphere(xyz=gtab.gradients[where_dwi]), sh_order=8)
     ratio = sf_to_sh(qb_odf_gt_single, sphere, sh_order=8)
 
-    test = sh_to_sf(ratio, sphere, 8)
-
-    response_actor = fvtk.sphere_funcs(test, sphere)
-#    response_actor = fvtk.sphere_funcs(odf_gt_single, Sphere(xyz=gtab.gradients[where_dwi]))
-
-    fvtk.add(ren, response_actor)
-
-    fvtk.show(ren)
-
-    e1 = 15.0
-    e2 = 3.0
-    ratio = e2 / e1
+#    e1 = 15.0
+#    e2 = 3.0
+#    ratio = e2 / e1
 
     csd = ConstrainedSDTModel(gtab, ratio, None)
 
