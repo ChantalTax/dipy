@@ -597,7 +597,22 @@ def odf_sh_to_sharp(odfs_sh, sphere, basis=None, ratio=3 / 15., sh_order=8,
     real_sym_sh = sph_harm_lookup[basis]
 
     B_reg, m, n = real_sym_sh(sh_order, theta, phi)
-    R, P = forward_sdt_deconv_mat(ratio, n, r2_term=r2_term)
+#    R, P = forward_sdt_deconv_mat(ratio, n, r2_term=r2_term)
+
+    if isinstance(ratio, float):
+            R, P = forward_sdt_deconv_mat(ratio, n, r2_term=r2_term)
+        else:
+            r_rh = sh_to_rh(ratio, m, n)
+            R = forward_sdeconv_mat(r_rh, n)
+
+            n_degrees = n.max() // 2 + 1
+            frt = np.zeros(n_degrees) # FRT (Funk-Radon transform) q-ball matrix
+            for l in np.arange(0, n_degrees*2, 2):
+                frt[l / 2] = 2 * np.pi * lpn(l, 0)[0][-1]
+
+            idx = n // 2
+            bb = frt[idx]
+            P = np.diag(bb)
 
     # scale lambda to account for differences in the number of
     # SH coefficients and number of mapped directions
