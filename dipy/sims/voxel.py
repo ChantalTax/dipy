@@ -337,6 +337,53 @@ def single_tensor_odf(r, evals=None, evecs=None):
     return (1 / (4 * np.pi * np.prod(evals) ** (1 / 2) * P)).reshape(out_shape)
 
 
+def single_tensor_qb_odf(r, evals=None, evecs=None):
+    """Simulated Q-ball ODF with a single tensor, not normalized.
+
+    Parameters
+    ----------
+    r : (N,3) or (M,N,3) ndarray
+        Measurement positions in (x, y, z), either as a list or on a grid.
+    evals : (3,)
+        Eigenvalues of diffusion tensor.  By default, use values typical for
+        prolate white matter.
+    evecs : (3, 3) ndarray
+        Eigenvectors of the tensor.  You can also think of these as the
+        rotation matrix that determines the orientation of the diffusion
+        tensor.
+
+    Returns
+    -------
+    ODF : (N,) ndarray
+        The diffusion probability at ``r`` after time ``tau``.
+
+    References
+    ----------
+    .. [1] Aganj et al., "Reconstruction of the Orientation Distribution
+           Function in Single- and Multiple-Shell q-Ball Imaging Within
+           Constant Solid Angle", Magnetic Resonance in Medicine, nr. 64,
+           pp. 554--566, 2010.
+
+    """
+    if evals is None:
+        evals = diffusion_evals
+
+    if evecs is None:
+        evecs = np.eye(3)
+
+    out_shape = r.shape[:r.ndim - 1]
+
+    R = np.asarray(evecs)
+    D = dot(dot(R, np.diag(evals)), R.T)
+    Di = np.linalg.inv(D)
+    r = r.reshape(-1, 3)
+    P = np.zeros(len(r))
+    for (i, u) in enumerate(r):
+        P[i] = (dot(dot(u.T, Di), u)) ** (1/2)
+
+    return (1 / P).reshape(out_shape)
+
+
 def all_tensor_evecs(e0):
     """Given the principle tensor axis, return the array of all
     eigenvectors (or, the rotation matrix that orientates the tensor).
