@@ -77,6 +77,9 @@ if __name__=='__main__':
     fvtk.show(ren)
 
     ratio = sf_to_sh(qb_odf_gt_single, sphere, sh_order=8)
+    m, n = sph_harm_ind_list(sh_order)
+    mask_m = m != 0
+    ratio[mask_m] = 0
 
 #    e1 = 15.0
 #    e2 = 3.0
